@@ -9,7 +9,7 @@ Vehicle::Vehicle()
     _currStreet = nullptr;
     _posStreet = 0.0;
     _type = ObjectType::objectVehicle;
-    _speed = 400; // m/s
+    _speed = 200; // m/s
 }
 
 
@@ -76,6 +76,11 @@ void Vehicle::drive()
             // check wether halting position in front of destination has been reached
             if (completion >= 0.9 && !hasEnteredIntersection)
             {
+                std::future<void> ftrEntryGranted = std::async(&Intersection::addVehicleToQueue, _currDestination, get_shared_this());
+
+                ftrEntryGranted.get();
+
+
                 // slow down and set intersection flag
                 _speed /= 10.0;
                 hasEnteredIntersection = true;
@@ -103,6 +108,8 @@ void Vehicle::drive()
                 
                 // pick the one intersection at which the vehicle is currently not
                 std::shared_ptr<Intersection> nextIntersection = nextStreet->getInIntersection()->getID() == _currDestination->getID() ? nextStreet->getOutIntersection() : nextStreet->getInIntersection(); 
+
+                _currDestination->vehicleHasLeft(get_shared_this());
 
                 // assign new street and destination
                 this->setCurrentDestination(nextIntersection);

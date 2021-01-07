@@ -8,10 +8,33 @@
 #include "Intersection.h"
 #include "Vehicle.h"
 
+int WaitingVehicles::getSize()
+{
+    return _vehicles.size();
+}
+
+void WaitingVehicles::pushBack(std::shared_ptr<Vehicle> vehicle, std::promise<void>&& promise)
+{
+    _vehicles.push_back(vehicle);
+    _promises.push_back(std::move(promise));
+}
+
+void WaitingVehicles::permitEntryToFirstInQueue()
+{
+    auto firstPromise = _promises.begin();
+    auto firstVehicle = _vehicles.begin();
+
+    firstPromise->set_value();
+
+    _vehicles.erase(firstVehicle);
+    _promises.erase(firstPromise);
+}
+
 
 Intersection::Intersection()
 {
     _type = ObjectType::objectIntersection;
+    _isBlocked = false;
 }
 
 void Intersection::addStreet(std::shared_ptr<Street> street)
@@ -32,4 +55,48 @@ std::vector<std::shared_ptr<Street>> Intersection::queryStreets(std::shared_ptr<
     }
 
     return outgoings;
+}
+
+void Intersection::addVehicleToQueue(std::shared_ptr<Vehicle> vehicle)
+{
+    std::cout << "Intersection #" << _id << "::addVehicleToQueue: thread id = " << std::this_thread::get_id() << std::endl;
+
+    std::promise<void> prmsVehicleAllowedToEnter;
+    std::future<void> ftrVehicleAllowedToEnter = prmsVehicleAllowedToEnter.get_future();
+
+    _waitingVehicles.pushBack(vehicle, std::move(prmsVehicleAllowedToEnter));
+
+    ftrVehicleAllowedToEnter.wait();
+
+    std::cout << "Intersection #" << _id << ": Vehicle #" << vehicle->getID() << " is granted entry." << std::endl;
+}
+
+void Intersection::vehicleHasLeft(std::shared_ptr<Vehicle> vehicle)
+{
+    this->setIsBlocked(false);
+}
+
+void Intersection::setIsBlocked(bool isBlocked)
+{
+    _isBlocked = isBlocked;
+}
+
+void Intersection::simulate()
+{
+    _threads.emplace_back(std::thread(&Intersection::processVehicleQueue, this));
+}
+
+void Intersection::processVehicleQueue()
+{
+    while (true)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+        if (_waitingVehicles.getSize() > 0 && !_isBlocked)
+        {
+            this->setIsBlocked(true);
+
+            _waitingVehicles.permitEntryToFirstInQueue();
+        }        
+    }
 }
